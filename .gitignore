@@ -1,0 +1,49 @@
+# ************************************************************
+# Global ignore files
+# ************************************************************
+# ====================
+# Global
+# ====================
+*~
+*.autosave
+*.bak
+*.backup
+*.layout
+*.log
+*.orig
+*.save
+*.so
+*.stackdump
+*.suo
+*.swp
+*.tmp
+*.user
+*.user*
+._*
+.Spotlight-V100
+.Trashes
+.DS_Store
+.DS_Store?
+ehthumbs.db
+[Tt]humbs.db
+
+
+# ====================
+# Directories
+# ====================
+[Bb]uild
+[Bb]builds
+**/[Bb]uild
+**/[Bb]uilds
+.vscode/*
+.vs/
+**/[Ll]ogs
+
+
+
+# ************************************************************
+# Specific ignore
+# ************************************************************
+[Tt]mp
+[Tt]emp
+
