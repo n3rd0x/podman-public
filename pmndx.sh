@@ -25,7 +25,11 @@
 # Configurations
 # ************************************************************
 pmndx_tag="pmndx"
-pmndx_log_file="${pmndx_tag}.log"
+pmndx_log_dir="."
+if [ -z "${pmndx_log_name}" ]; then
+    pmndx_log_name="${pmndx_tag}.log"
+fi
+pmndx_log_file="${pmndx_log_dir}/${pmndx_log_name}"
 pmndx_remove_log=true
 
 
@@ -34,6 +38,12 @@ pmndx_remove_log=true
 # ************************************************************
 # Common
 # ************************************************************
+if [ ! -d ${pmndx_log_dir} ]; then
+    echo "[${pmndx_tag}] Create log directory [${pmndx_log_dir}]"
+    mkdir -pv ${pmndx_log_dir}
+fi
+
+
 if ${pmndx_remove_log}; then
     if [ -f ${pmndx_log_file} ]; then
         echo "[${pmndx_tag}] Clean log [${pmndx_log_file}]"
@@ -75,7 +85,7 @@ pmndx_create_dir() {
 # ************************************************************
 pmndx_verify_running() {
     ok=true
-    name=""
+    param_name=""
 
 
     # ====================
@@ -83,14 +93,14 @@ pmndx_verify_running() {
     # ====================
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            --name) name="$2"; shift ;;
-            *) pmndx_log "pmndx_verify_running Unknown parameter: $1"; exit 1 ;;
+            --name) param_name="$2"; shift ;;
+            *) pmndx_log "pmndx_verify_running: Unknown parameter: $1"; exit 1 ;;
         esac
         shift
     done
 
 
-    if [ -z "${name}" ]; then
+    if [ -z "${param_name}" ]; then
         pmndx_log "pmndx_verify_running: Missing name of the container to process"
         ok=false
     fi
@@ -105,63 +115,65 @@ pmndx_verify_running() {
     # ====================
     # Process
     # ====================
-    started=$(podman inspect -f '{{.State.Running}}' ${name})
+    started=$(podman inspect -f '{{.State.Running}}' ${param_name})
     if [ "${started}" = "true" ]; then
-        pmndx_log " * Container '${name}' is running ^__^ Yeah!"
+        pmndx_log " * Container '${param_name}' is running ^__^ Yeah!"
     else
-        pmndx_log " * Container '${name}' not running O__O Nooo!"
+        pmndx_log " * Container '${param_name}' not running O__O Nooo!"
     fi
 }
 
 
 pmndx_create_container() {
     ok=true
-    buildfile=""
-    cmd=""
-    detach=false
-    env=""
-    envfile=""
-    hostname=""
-    image=""
-    interactive=false
-    name=""
-    pod=""
-    port=""
-    tty=false
-    volume=""
+    param_buildfile=""
+    param_cmd=""
+    param_detach=false
+    param_env=""
+    param_envfile=""
+    param_hostname=""
+    param_image=""
+    param_interactive=false
+    param_name=""
+    param_pod=""
+    param_port=""
+    param_tty=false
+    param_volume=""
 
 
     # ====================
     # Arguments
     # ====================
     while [[ "$#" -gt 0 ]]; do
+        # Debug
+        #echo "PARAMS: ${1} :: ${2}"
         case $1 in
-            --buildfile) file="$2"; shift ;;
-            --cmd) cmd="$2"; shift ;;
-            --detach) detach=true; ;;
-            --env) env="${2}"; shift ;;
-            --envfile) envfile="$2"; shift ;;
-            --hostname) hostname="$2"; shift ;;
-            --image) image="$2"; shift ;;
-            --interactive) interactive=true; ;;
-            --name) name="$2"; shift ;;
-            --pod) pod="$2"; shift ;;
-            --port) port="$2"; shift ;;
-            --tty) tty=true; ;;
-            --volume) volume="$2"; shift ;;
+            --buildfile) param_buildfile="$2"; shift ;;
+            --cmd) param_cmd="$2"; shift ;;
+            --detach) param_detach=true;;
+            --env) param_env="${2}"; shift ;;
+            --envfile) param_envfile="$2"; shift ;;
+            --hostname) param_hostname="$2"; shift ;;
+            --image) param_image="$2"; shift ;;
+            --interactive) param_interactive=true; ;;
+            --name) param_name="$2"; shift ;;
+            --pod) param_pod="$2"; shift ;;
+            --port) param_port="$2"; shift ;;
+            --tty) param_tty=true; ;;
+            --volume) param_volume="$2"; shift ;;
             *) pmndx_log "pmndx_create_container: Unknown parameter: $1"; exit 1 ;;
         esac
         shift
     done
 
 
-    if [ -z "${name}" ]; then
+    if [ -z "${param_name}" ]; then
         pmndx_log "pmndx_create_container: Missing name of the container"
         ok=false
     fi
 
 
-    if [ -z "${image}" ]; then
+    if [ -z "${param_image}" ]; then
         pmndx_log "pmndx_create_container: Missing name of the image to use"
         ok=false
     fi
@@ -178,47 +190,47 @@ pmndx_create_container() {
     # Process
     # ====================
     # Store in an array.
-    volume_array=(${volume})
-    env_array=(${env})
-    envfile_array=(${envfile})
-    port_array=(${port})
+    volume_array=(${param_volume})
+    env_array=(${param_env})
+    envfile_array=(${param_envfile})
+    port_array=(${param_port})
 
 
-    pmndx_log "== Container [${name}] =="
+    pmndx_log "== Container [${param_name}] =="
 
 
     # Build if the image not exists.
-    if [ -n "${buildfile}" ]; then
-        if ! podman image exists ${image}; then
-            pmndx_log " * Image '${image}' does not exists, start building from [${buildfile}]"
+    if [ -n "${param_buildfile}" ]; then
+        if ! podman image exists ${param_image}; then
+            pmndx_log " * Image '${param_image}' does not exists, start building from [${param_buildfile}]"
 
-            podman build -f ${buildfile} -t ${image} .
+            podman build -f ${param_buildfile} -t ${param_image} .
         fi
     fi
 
 
 
-    if ! podman container exists ${name}; then
-        if ! podman image exists ${image}; then
-            pmndx_log " * No image '${image} exists, skip creating the container"
+    if ! podman container exists ${param_name}; then
+        if ! podman image exists ${param_image}; then
+            pmndx_log " * No image '${param_image} exists, skip creating the container"
             return
         fi
 
 
-        pmndx_log " * Create container from image '${image}'"
+        pmndx_log " * Create container from image '${param_image}'"
 
 
         volume_args=""
-        for vol in "${volume_array[@]}"; do
-            pmndx_log " * Volume: ${vol}"
-            volume_args+="--volume ${vol} "
+        for vvol in "${volume_array[@]}"; do
+            pmndx_log " * Volume: ${vvol}"
+            volume_args+="--volume ${vvol} "
         done
 
 
         env_args=""
-        for eval in "${env_array[@]}"; do
-            pmndx_log " * ENV: ${eval}"
-            env_args+="--env ${eval} "
+        for venv in "${env_array[@]}"; do
+            pmndx_log " * ENV: ${venv}"
+            env_args+="--env ${venv} "
         done
 
 
@@ -235,23 +247,23 @@ pmndx_create_container() {
 
 
         pod_args=""
-        if [ -n "${pod}" ]; then
-            pmndx_log " * Pod: ${pod}"
-            pod_args="--pod ${pod}"
+        if [ -n "${param_pod}" ]; then
+            pmndx_log " * Pod: ${param_pod}"
+            pod_args="--pod ${param_pod}"
         fi
 
 
         port_args=""
-        for port in "${port_array[@]}"; do
-            pmndx_log " * Port: ${port}"
-            port_args+="-p ${port} "
+        for param_port in "${port_array[@]}"; do
+            pmndx_log " * Port: ${param_port}"
+            port_args+="-p ${param_port} "
         done
 
 
         hostname_args=""
-        if [ -n "${hostname}" ]; then
-            pmndx_log " * Hostname: ${hostname}"
-            hostname_args="--hostname ${hostname}"
+        if [ -n "${param_hostname}" ]; then
+            pmndx_log " * Hostname: ${param_hostname}"
+            hostname_args="--hostname ${param_hostname}"
         fi
 
 
@@ -260,39 +272,46 @@ pmndx_create_container() {
         mode="container create"
 
 
-        # Use run because it support for running a command.
-        if [ -n "${cmd}" ]; then
-            pmndx_log " * CMD: ${cmd}"
-            pmndx_log " * Switch to run mode"
+        # Use run because it supparam_port for running a command.
+        if [ -n "${param_cmd}" ]; then
+            pmndx_log " * CMD: ${param_cmd}"
+            mode="run"
+        fi
+
+        if ${param_detach}; then
             mode="run"
         fi
 
 
-        detach_args=""
-        if ${detach}; then
-            pmndx_log " * Detach"
-            detach_args="-d"
+        if [ "${mode}" = "run" ]; then
+            pmndx_log " * Switch to run mode"
+            pmndx_log " * MODE: run"
         fi
 
 
+        detach_args=""
+        if ${param_detach}; then
+            pmndx_log " * Feature: Detach"
+            detach_args="-d"
+        fi
+
         interactive_args=""
-        if ${interactive}; then
-            pmndx_log " * Interactive"
+        if ${param_interactive}; then
+            pmndx_log " * Feature: Interactive"
             interactive_args="-i"
         fi
 
         tty_args=""
-        if ${tty}; then
-            pmndx_log " * Support TTY"
+        if ${param_tty}; then
+            pmndx_log " * Feature: TTY"
             tty_args="-t"
         fi
 
-
-        podman ${mode} ${detach_args} ${interactive_args} ${tty_args} ${port_args} ${env_args} ${envfile_args} --name "${name}" ${hostname_args} ${volume_args} ${pod_args} ${image} ${cmd}
+        podman ${mode} ${detach_args} ${interactive_args} ${tty_args} ${port_args} ${env_args} ${envfile_args} --name "${param_name}" ${hostname_args} ${volume_args} ${pod_args} ${param_image} ${param_cmd}
 
         # Verify only when using run instead of create.
         if [ "${mode}" = "run" ]; then
-            pmndx_verify_running --name ${name}
+            pmndx_verify_running --name ${param_name}
         fi
 
     else
@@ -303,8 +322,8 @@ pmndx_create_container() {
 
 pmndx_create_network() {
     ok=true
-    name=""
-    driver=""
+    param_name=""
+    param_driver=""
 
 
     # ====================
@@ -312,15 +331,15 @@ pmndx_create_network() {
     # ====================
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            --name) name="$2"; shift ;;
-            --driver) driver="$2"; shift ;;
+            --name) param_name="$2"; shift ;;
+            --driver) param_driver="$2"; shift ;;
             *) pmndx_log "pmndx_create_network: Unknown parameter: $1"; exit 1 ;;
         esac
         shift
     done
 
 
-    if [ -z "${name}" ]; then
+    if [ -z "${param_name}" ]; then
         pmndx_log "pmndx_create_network: Missing name of the network"
         ok=false
     fi
@@ -336,27 +355,27 @@ pmndx_create_network() {
     # ====================
     # Process
     # ====================
-    pmndx_log "== Network [${name}] =="
+    pmndx_log "== Network [${param_name}] =="
 
 
-    if podman network exists ${name}; then
+    if podman network exists ${param_name}; then
         pmndx_log " * Network exists, skip creating the network"
 
     else
-        pmndx_log " * Create network '${name}'"
+        pmndx_log " * Create network '${param_name}'"
 
-        driver_arg=""
-        if [ -n "${driver}" ]; then
-            pmndx_log " * Driver: ${driver}"
-            driver_arg="--driver ${driver}"
+        driver_args=""
+        if [ -n "${param_driver}" ]; then
+            pmndx_log " * Driver: ${param_driver}"
+            driver_args="--driver ${param_driver}"
         fi
 
 
-        podman network create "${name}" ${driver_arg}
+        podman network create "${param_name}" ${driver_args}
 
 
         # Podman 3.4.4 on Ubuntu 22.04.
-        cni="${HOME}/.config/cni/net.d/${name}.conflist"
+        cni="${HOME}/.config/cni/net.d/${param_name}.conflist"
         if grep -q 'cniVersion": "1.0.0",' ${cni}; then
             pmndx_log " * Updating to compatible plugin version (1.0.0 => 0.4.0)"
             sed -i 's/cniVersion": "1.0.0",/cniVersion": "0.4.0",/g' ${cni}
@@ -369,9 +388,9 @@ pmndx_create_network() {
 
 pmndx_create_pod() {
     ok=true
-    name=""
-    port=""
-    network=""
+    param_name=""
+    param_port=""
+    param_network=""
 
 
     # ====================
@@ -379,23 +398,23 @@ pmndx_create_pod() {
     # ====================
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            --name) name="$2"; shift ;;
-            --port) port="$2"; shift ;;
-            --network) network="$2"; shift ;;
-            *) pmndx_log "pmndx_create_pod: Unknown parameter: $1"; exit 1 ;;
+            --name) param_name="$2"; shift ;;
+            --port) param_port="$2"; shift ;;
+            --network) param_network="$2"; shift ;;
+            *) pmndx_log "pmndx_create_param_pod: Unknown parameter: $1"; exit 1 ;;
         esac
         shift
     done
 
 
-    if [ -z "${name}" ]; then
-        pmndx_log "pmndx_create_pod: Missing name of the pod"
+    if [ -z "${param_name}" ]; then
+        pmndx_log "pmndx_create_param_pod: Missing name of the param_pod"
         ok=false
     fi
 
 
     if ! ${ok}; then
-        pmndx_log "Example: pmndx_create_pod --name my_pod --port \"8080:80 8443:443\" --network my_network"
+        pmndx_log "Example: pmndx_create_param_pod --name my_param_pod --port \"8080:80 8443:443\" --network my_network"
         exit -1
     fi
 
@@ -403,32 +422,32 @@ pmndx_create_pod() {
     # ====================
     # Process
     # ====================
-    port_array=(${port})
+    port_array=(${param_port})
 
-    pmndx_log "Pod [${name}]"
+    pmndx_log "Pod [${param_name}]"
 
 
-    if podman pod exists ${name}; then
+    if podman pod exists ${param_name}; then
         pmndx_log " * Pod exists, skip creating the pod"
 
     else
-        pmndx_log " * Create pod '${name}'"
+        pmndx_log " * Create pod '${param_name}'"
 
 
         port_args=""
-        for port in "${port_array[@]}"; do
-            pmndx_log " * Port: ${port}"
-            port_args+="-p ${port} "
+        for vport in "${port_array[@]}"; do
+            pmndx_log " * Port: ${vport}"
+            port_args+="-p ${vport} "
         done
 
         network_args=""
-        if [ -n "${network}" ]; then
-            pmndx_log " * Network: ${network}"
-            network_args="--network ${network}"
+        if [ -n "${param_network}" ]; then
+            pmndx_log " * Network: ${param_network}"
+            network_args="--network ${param_network}"
         fi
 
 
-        podman pod create ${port_args} ${network_args} -n "${name}"
+        podman pod create ${port_args} ${network_args} -n "${param_name}"
     fi
 }
 
@@ -436,7 +455,7 @@ pmndx_create_pod() {
 
 pmndx_create_volume() {
     ok=true
-    name=""
+    param_name=""
 
 
     # ====================
@@ -444,21 +463,21 @@ pmndx_create_volume() {
     # ====================
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            --name) name="$2"; shift ;;
+            --name) param_name="$2"; shift ;;
             *) pmndx_log "pmndx_create_volume: Unknown parameter: $1"; exit 1 ;;
         esac
         shift
     done
 
 
-    if [ -z "${name}" ]; then
-        pmndx_log "pmndx_create_volume: Missing name of the volume"
+    if [ -z "${param_name}" ]; then
+        pmndx_log "pmndx_create_volume: Missing name of the param_volume"
         ok=false
     fi
 
 
     if ! ${ok}; then
-        pmndx_log "Example: pmndx_create_volume --name my_volume"
+        pmndx_log "Example: pmndx_create_volume --name my_param_volume"
         exit -1
     fi
 
@@ -466,42 +485,85 @@ pmndx_create_volume() {
     # ====================
     # Process
     # ====================
-    pmndx_log "== Volume [${1}] =="
+    pmndx_log "== Volume [${param_name}] =="
 
-    if podman volume exists ${1}; then
-        pmndx_log " * Volume exists, skip creating the volume"
+    if podman volume exists ${param_name}; then
+        pmndx_log " * Volume exists, skip creating the param_volume"
 
     else
-        pmndx_log " * Create volume '${1}'"
-        podman volume create ${1}
+        pmndx_log " * Create param_volume '${param_name}'"
+        podman volume create ${param_name}
     fi
 }
 
 
-pmndx_export_image() {
+pmndx_exist_container() {
     ok=true
-    image=""
-    output=""
+    param_name=""
 
     # ====================
     # Arguments
     # ====================
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            --image) image="$2"; shift ;;
-            --output) output="$2"; shift ;;
+            --name) param_name="$2"; shift ;;
+            *) pmndx_log "pmndx_exist_container: Unknown parameter: $1"; exit 1 ;;
+        esac
+        shift
+    done
+
+
+    if [ -z "${param_name}" ]; then
+        pmndx_log "pmndx_exist_container: Missing name of the container to check"
+        ok=false
+    fi
+
+    if ! ${ok}; then
+        pmndx_log "Example: pmndx_exist_container --name my_container"
+        exit -1
+    fi
+
+
+    # ====================
+    # Process
+    # ====================
+    #pmndx_log "== Exists [${param_name}] =="
+    if ! podman container exists ${param_name}; then
+        #pmndx_log " * Container not exists"
+        return 1
+    else
+        #pmndx_log " * Container exists"
+        return 0
+    fi
+}
+
+
+
+
+pmndx_export_image() {
+    ok=true
+    param_image=""
+    param_output=""
+
+    # ====================
+    # Arguments
+    # ====================
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --image) param_image="$2"; shift ;;
+            --output) param_output="$2"; shift ;;
             *) pmndx_log "pmndx_export_image: Unknown parameter: $1"; exit 1 ;;
         esac
         shift
     done
 
 
-    if [ -z "${image}" ]; then
+    if [ -z "${param_image}" ]; then
         pmndx_log "pmndx_export_image: Missing name of the image to export"
         ok=false
     fi
 
-    if [ -z "${output}" ]; then
+    if [ -z "${param_output}" ]; then
         pmndx_log "pmndx_export_image: Missing output name"
         ok=false
     fi
@@ -516,35 +578,196 @@ pmndx_export_image() {
     # Process
     # ====================
     format="docker-archive"
-    pmndx_log "== Export [${image}] =="
-    if ! podman image exists ${image}; then
-        pmndx_log " * Image not exists, skip exporting the image"
+    pmndx_log "== Export [${param_image}] =="
+    if ! podman image exists ${param_image}; then
+        pmndx_log " * Image not exists, skip export the image"
     else
         pmndx_log " * Format: ${format}"
         pmndx_log " * Export: ${output}"
-        podman save --format ${format} -o ${output} ${image}
+        podman save --format ${format} -o ${output} ${param_image}
     fi
 }
 
 
-pmndx_start_container() {
+
+
+pmndx_pull_image() {
     ok=true
-    name=""
+    param_name=""
 
     # ====================
     # Arguments
     # ====================
     while [[ "$#" -gt 0 ]]; do
         case $1 in
-            --name) name="$2"; shift ;;
+            --name) param_name="$2"; shift ;;
+            *) pmndx_log "pmndx_pull_image: Unknown parameter: $1"; exit 1 ;;
+        esac
+        shift
+    done
+
+
+    if [ -z "${param_name}" ]; then
+        pmndx_log "pmndx_pull_image: Missing name of the image to pull"
+        ok=false
+    fi
+
+    if ! ${ok}; then
+        pmndx_log "Example: pmndx_pull_image --name my_image"
+        exit -1
+    fi
+
+
+    # ====================
+    # Process
+    # ====================
+    pmndx_log "== Pull [${param_name}] =="
+
+
+    if ! podman image exists ${param_name}; then
+        pmndx_log " * Image not exists, start pulling the image"
+        podman pull ${param_name}
+    else
+        pmndx_log " * Image exists, no need to be pulled"
+    fi
+}
+
+
+
+
+pmndx_run_once() {
+    ok=true
+    param_cmd=""
+    param_detach=false
+    param_env=""
+    param_envfile=""
+    param_image=""
+    param_interactive=false
+    param_pod=""
+    param_tty=false
+
+
+    # ====================
+    # Arguments
+    # ====================
+    while [[ "$#" -gt 0 ]]; do
+        #echo "PARAMS: ${1} :: ${2}"
+        case $1 in
+            --cmd) param_cmd="$2"; shift ;;
+            --detach) param_detach=true;;
+            --env) param_env="${2}"; shift ;;
+            --envfile) param_envfile="$2"; shift ;;
+            --image) param_image="$2"; shift ;;
+            --interactive) param_interactive=true;;
+            --pod) param_pod="$2"; shift ;;
+            --tty) param_tty=true;;
+            *) pmndx_log "pmndx_run_once: Unknown parameter: $1"; exit 1 ;;
+        esac
+        shift
+    done
+
+
+    if [ -z "${param_image}" ]; then
+        pmndx_log "pmndx_run_once: Missing name of the image to use"
+        ok=false
+    fi
+
+    if [ -z "${param_cmd}" ]; then
+        pmndx_log "pmndx_run_once: Missing command to execute"
+        ok=false
+    fi
+
+
+    if ! ${ok}; then
+        pmndx_log "Example: pmndx_run_once: --detach --interactive --tty --env \"MY_ENV=my_env YOUR_ENV=your_env\" --envfile \"/envfile_a /envfile_b\" --cmd \"ls -al\" --image my_image --pod my_pod"
+        exit -1
+    fi
+
+
+
+    # ====================
+    # Process
+    # ====================
+    env_array=(${param_env})
+    envfile_array=(${param_envfile})
+
+
+    pmndx_log "== Run [${param_image}] =="
+
+
+    if ! podman image exists ${param_image}; then
+        pmndx_log " * No image '${param_image} exists, skip running the image"
+        return
+    fi
+
+
+    env_args=""
+    for venv in "${env_array[@]}"; do
+        pmndx_log " * ENV: ${venv}"
+        env_args+="--env ${venv} "
+    done
+
+
+    envfile_args=""
+    for efile in "${envfile_array[@]}"; do
+        if [ -f "${efile}" ]; then
+            pmndx_log " * EnvFile: ${efile}"
+            envfile_args+="--env-file ${efile} "
+
+        else
+            pmndx_log " * EnvFile: ${efile} (SKIP DUE TO NOT EXISTS)"
+        fi
+    done
+
+
+    pod_args=""
+    if [ -n "${param_pod}" ]; then
+        pmndx_log " * Pod: ${param_pod}"
+        pod_args="--pod ${param_pod}"
+    fi
+
+    detach_args=""
+    if ${param_detach}; then
+        pmndx_log " * Feature: Detach"
+        detach_args="-d"
+    fi
+
+    interactive_args=""
+    if ${param_interactive}; then
+        pmndx_log " * Feature: Interactive"
+        interactive_args="-i"
+    fi
+
+    tty_args=""
+    if ${param_tty}; then
+        pmndx_log " * Feature: TTY"
+        tty_args="-t"
+    fi
+
+    podman run ${detach_args} ${interactive_args} ${tty_args} --rm ${env_args} ${envfile_args} ${pod_args} ${param_image} ${param_cmd}
+}
+
+
+
+
+pmndx_start_container() {
+    ok=true
+    param_name=""
+
+    # ====================
+    # Arguments
+    # ====================
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --name) param_name="$2"; shift ;;
             *) pmndx_log "pmndx_start_container: Unknown parameter: $1"; exit 1 ;;
         esac
         shift
     done
 
 
-    if [ -z "${name}" ]; then
-        pmndx_log "pmndx_start_container: Missing name"
+    if [ -z "${param_name}" ]; then
+        pmndx_log "pmndx_start_container: Missing name of the container"
         ok=false
     fi
 
@@ -557,17 +780,17 @@ pmndx_start_container() {
     # ====================
     # Process
     # ====================
-    pmndx_log "== Start [${name}] =="
-    if ! podman container exists ${name}; then
+    pmndx_log "== Start [${param_name}] =="
+    if ! podman container exists ${param_name}; then
         pmndx_log " * Container does not exists, cannot be started"
     else
-        started=$(podman inspect -f '{{.State.Running}}' ${name})
+        started=$(podman inspect -f '{{.State.Running}}' ${param_name})
         if [ "${started}" = "false" ]; then
             pmndx_log " * Container not running, starting up"
-            podman container start "${name}"
+            podman container start "${param_name}"
 
 
-            pmndx_verify_running ${name}
+            pmndx_verify_running ${param_name}
         else
             pmndx_log " * Container is already running"
         fi
